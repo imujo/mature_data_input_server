@@ -54,11 +54,49 @@ app.get('/predmet/all', (req, res) => {
 
 })
 
+app.get('/zadatak_vrsta/all', (req, res) => {
+    
+    db.select('id', 'zadatak_vrsta').from('zadatak_vrsta')
+        .then(data => {
+            if (data.length){
+                let newDict = {}
+
+                data.forEach((item, i) =>{
+                    newDict[item.zadatak_vrsta] = item.id
+                })
+                return res.json(newDict)
+            }
+
+            res.status(500).json("error")
+        })
+        .catch(err => res.status(500).send("error"))
+
+})
+
+app.get('/nadzadatak_vrsta/all', (req, res) => {
+    
+    db.select('id', 'nadzadatak_vrsta').from('nadzadatak_vrsta')
+        .then(data => {
+            if (data.length){
+                let newDict = {}
+
+                data.forEach((item, i) =>{
+                    newDict[item.nadzadatak_vrsta] = item.id
+                })
+                return res.json(newDict)
+            }
+
+            res.status(500).json("error")
+        })
+        .catch(err => res.status(500).send("error"))
+
+})
+
 app.get('/matura/zadatci', async (req, res)=> {
     const {matura_id} = req.query
 
      let zadatci = await db('zadatak').where({matura_id: matura_id}).orderBy('broj_zadatka').select()
-     zadatci.forEach((zadatak, i) => zadatci[i].type = 'zadatak')
+     zadatci.forEach((_, i) => zadatci[i].type = 'zadatak')
 
 
      let nadzadatciIds = new Set()
@@ -70,6 +108,7 @@ app.get('/matura/zadatci', async (req, res)=> {
     
     nadzadatci.forEach((_, i) => nadzadatci[i].type = 'nadzadatak')
 
+
     let newList = []
     let lastIndex = 0
      nadzadatci.forEach(nadzadatak => {
@@ -79,11 +118,11 @@ app.get('/matura/zadatci', async (req, res)=> {
 
 
         let nadzadatakZadatci = nadzadatak
-        nadzadatakZadatci.zadatci = zadatci.slice(first, last)
+        nadzadatakZadatci.zadatci = zadatci.slice(first, last+1)
         newList = newList.concat(nadzadatakZadatci)
 
 
-        lastIndex = last
+        lastIndex = last+1
      })
      newList = newList.concat(zadatci.slice(lastIndex, zadatci.length+1))
     
@@ -94,7 +133,7 @@ app.get('/matura/zadatci', async (req, res)=> {
 })
 
 app.put('/zadatak', (req, res) => {
-    const {vrsta_id, matura_id, broj_zadatka, zadatak_tekst, slika_path, nadzadatak_id, broj_bodova} = req.body
+    const {vrsta_id, matura_id, broj_zadatka, zadatak_tekst, slika_path, nadzadatak_id, broj_bodova, primjer} = req.body
 
     db('zadatak').insert({
         vrsta_id: vrsta_id,
@@ -104,10 +143,24 @@ app.put('/zadatak', (req, res) => {
         slika_path: slika_path,
         nadzadatak_id: nadzadatak_id,
         broj_bodova: broj_bodova,
+        primjer: primjer,
         date_created: new Date()
     }, ['id']).then(data => res.json(data))
 })
 
+app.put('/nadzadatak', (req, res) => {
+    const {vrsta_id, matura_id, broj_nadzadatka, nadzadatak_tekst, slika_path, audio_path} = req.body
+
+    db('nadzadatak').insert({
+        vrsta_id: vrsta_id,
+        matura_id: matura_id,
+        broj_nadzadatka: broj_nadzadatka,
+        nadzadatak_tekst: nadzadatak_tekst,
+        slika_path: slika_path,
+        audio_path: audio_path,
+        date_created: new Date()
+    }, ['id']).then(data => res.json(data))
+})
 
 
 
