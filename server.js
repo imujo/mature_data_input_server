@@ -96,7 +96,15 @@ app.get('/matura/zadatci', async (req, res)=> {
     const {matura_id} = req.query
 
      let zadatci = await db('zadatak').where({matura_id: matura_id}).orderBy('broj_zadatka').select()
-     zadatci.forEach((_, i) => zadatci[i].type = 'zadatak')
+
+     for (let i=0; i < zadatci.length; i++){
+        let zadatak = zadatci[i]
+        zadatci[i].type = 'zadatak'
+
+        let rjesenja = await db('rjesenje').where({zadatak_id: zadatak.id}).orderBy('slovo').select()
+        zadatci[i].rjesenja = rjesenja
+     }
+
 
 
      let nadzadatciIds = new Set()
@@ -158,6 +166,21 @@ app.put('/nadzadatak', (req, res) => {
         nadzadatak_tekst: nadzadatak_tekst,
         slika_path: slika_path,
         audio_path: audio_path,
+        date_created: new Date()
+    }, ['id']).then(data => res.json(data))
+})
+
+app.put('/rjesenje', (req, res) => {
+    const {matura_id, rjesenje_tekst, zadatak_id, slika_path, slovo, tocno, broj_bodova} = req.body
+
+    db('rjesenje').insert({
+        matura_id: matura_id,
+        rjesenje_tekst: rjesenje_tekst,
+        zadatak_id: zadatak_id,
+        slovo: slovo,
+        tocno: tocno,
+        slika_path: slika_path,
+        broj_bodova: broj_bodova,
         date_created: new Date()
     }, ['id']).then(data => res.json(data))
 })
