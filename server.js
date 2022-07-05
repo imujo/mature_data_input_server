@@ -1,149 +1,221 @@
-const { json } = require('body-parser')
-const express = require('express')
-const { default: knex } = require('knex')
-const db = require('./knex/db.js')
-var cors = require('cors')
-const app = express()
-const port = 3001
+const { json } = require("body-parser");
+const express = require("express");
+const { default: knex } = require("knex");
+const db = require("./knex/db.js");
+var cors = require("cors");
+const app = express();
+const port = 3001;
 
-app.use(cors())
-app.use(json())
+app.use(cors());
+app.use(json());
 
+// FUNCTIONS
+const findZadatciWithNadzadatak = (id, zadatci) => {
+  let first = zadatci.findIndex((zadatak) => zadatak.nadzadatak_id == id);
+  let last =
+    zadatci.length -
+    1 -
+    zadatci
+      .slice()
+      .reverse()
+      .findIndex((zadatak) => zadatak.nadzadatak_id == id);
 
-const findZadatciWithNadzadatak = (id, zadatci) => { 
-    let first = zadatci.findIndex(zadatak => zadatak.nadzadatak_id == id)
-    let last = zadatci.length - 1 - zadatci.slice().reverse().findIndex(zadatak => zadatak.nadzadatak_id == id)
+  return { first, last };
+};
 
-    return {first, last}
- }
+const deleteRjesenje = async (rjesenje_id) => {
+  return await db("rjesenje").where({ id: rjesenje_id }).del();
+};
 
-app.get('/', (req, res) => {
-    res.send('Server')
-})
+const deleteZadatak = async (zadatak_id) => {
+  let zadatakDeleted = await db("zadatak").where({ id: zadatak_id }).del();
 
+  const rjesenjaList = await db("rjesenje")
+    .where({ zadatak_id: zadatak_id })
+    .select("id");
 
-app.get('/matura_id', (req, res) => {
-    const {godina, sezona, predmet_id, razina} = req.query
+  for (rjesenje of rjesenjaList) {
+    deleteRjesenje(rjesenje.id);
+  }
 
-    db('matura').where({
-        godina: godina,
-        sezona: sezona,
-        razina: razina,
-        predmet_id: predmet_id
-    }).select('id')
-        .then(data => data.length ? res.json(data[0].id) : res.status(500).json('Error'))
-        .catch(err => res.status(500).send("error"))
-})
+  return zadatakDeleted;
+};
 
-app.get('/predmet/all', (req, res) => {
-    
-    db.select('id', 'predmet').from('predmet')
-        .then(data => {
-            if (data.length){
-                let newDict = {}
+const deleteNadzadatak = async (nadzadatak_id) => {
+  let nadzadatakDeleted = await db("nadzadatak")
+    .where({ id: nadzadatak_id })
+    .del();
 
-                data.forEach((item, i) =>{
-                    newDict[item.predmet] = item.id
-                })
-                return res.json(newDict)
-            }
+  const zadatakList = await db("zadatak")
+    .where({ nadzadatak_id: nadzadatak_id })
+    .select();
 
-            res.status(500).json("error")
-        })
-        .catch(err => res.status(500).send("error"))
+  for (zadatak of zadatakList) {
+    deleteZadatak(zadatak.id);
+  }
 
-})
+  return nadzadatakDeleted;
+};
 
-app.get('/zadatak_vrsta/all', (req, res) => {
-    
-    db.select('id', 'zadatak_vrsta').from('zadatak_vrsta')
-        .then(data => {
-            if (data.length){
-                let newDict = {}
+// GET ROUTES
 
-                data.forEach((item, i) =>{
-                    newDict[item.zadatak_vrsta] = item.id
-                })
-                return res.json(newDict)
-            }
+app.get("/matura_id", (req, res) => {
+  const { godina, sezona, predmet_id, razina } = req.query;
 
-            res.status(500).json("error")
-        })
-        .catch(err => res.status(500).send("error"))
+  db("matura")
+    .where({
+      godina: godina,
+      sezona: sezona,
+      razina: razina,
+      predmet_id: predmet_id,
+    })
+    .select("id")
+    .then((data) =>
+      data.length ? res.json(data[0].id) : res.status(500).json("Error")
+    )
+    .catch((err) => res.status(500).send("error"));
+});
 
-})
+app.get("/predmet/all", (req, res) => {
+  db.select("id", "predmet")
+    .from("predmet")
+    .then((data) => {
+      if (data.length) {
+        let newDict = {};
 
-app.get('/nadzadatak_vrsta/all', (req, res) => {
-    
-    db.select('id', 'nadzadatak_vrsta').from('nadzadatak_vrsta')
-        .then(data => {
-            if (data.length){
-                let newDict = {}
+        data.forEach((item, i) => {
+          newDict[item.predmet] = item.id;
+        });
+        return res.json(newDict);
+      }
 
-                data.forEach((item, i) =>{
-                    newDict[item.nadzadatak_vrsta] = item.id
-                })
-                return res.json(newDict)
-            }
+      res.status(500).json("error");
+    })
+    .catch((err) => res.status(500).send("error"));
+});
 
-            res.status(500).json("error")
-        })
-        .catch(err => res.status(500).send("error"))
+app.get("/zadatak_vrsta/all", (req, res) => {
+  db.select("id", "zadatak_vrsta")
+    .from("zadatak_vrsta")
+    .then((data) => {
+      if (data.length) {
+        let newDict = {};
 
-})
+        data.forEach((item, i) => {
+          newDict[item.zadatak_vrsta] = item.id;
+        });
+        return res.json(newDict);
+      }
 
-app.get('/matura/zadatci', async (req, res)=> {
-    const {matura_id} = req.query
+      res.status(500).json("error");
+    })
+    .catch((err) => res.status(500).send("error"));
+});
 
-     let zadatci = await db('zadatak').where({matura_id: matura_id}).orderBy('broj_zadatka').select()
+app.get("/nadzadatak_vrsta/all", (req, res) => {
+  db.select("id", "nadzadatak_vrsta")
+    .from("nadzadatak_vrsta")
+    .then((data) => {
+      if (data.length) {
+        let newDict = {};
 
-     for (let i=0; i < zadatci.length; i++){
-        let zadatak = zadatci[i]
-        zadatci[i].type = 'zadatak'
+        data.forEach((item, i) => {
+          newDict[item.nadzadatak_vrsta] = item.id;
+        });
+        return res.json(newDict);
+      }
 
-        let rjesenja = await db('rjesenje').where({zadatak_id: zadatak.id}).orderBy('slovo').select()
-        zadatci[i].rjesenja = rjesenja
-     }
+      res.status(500).json("error");
+    })
+    .catch((err) => res.status(500).send("error"));
+});
 
+app.get("/zadatak/all", async (req, res) => {
+  const { matura_id } = req.query;
 
+  let zadatci = await db("zadatak")
+    .where({ matura_id: matura_id })
+    .orderBy("broj_zadatka")
+    .select();
 
-     let nadzadatciIds = new Set()
-     zadatci.forEach(zadatak => {
-        nadzadatciIds.add(zadatak.nadzadatak_id)
-     })
-     
-     let nadzadatci = await db('nadzadatak').whereIn('id', Array.from(nadzadatciIds)).select()
-    
-    nadzadatci.forEach((_, i) => nadzadatci[i].type = 'nadzadatak')
+  let nadzadatciIds = new Set();
 
+  for (let i = 0; i < zadatci.length; i++) {
+    zadatci[i].type = "zadatak";
+    nadzadatciIds.add(zadatci[i].nadzadatak_id);
+  }
 
-    let newList = []
-    let lastIndex = 0
-     nadzadatci.forEach(nadzadatak => {
-        let {first, last} = findZadatciWithNadzadatak(parseInt(nadzadatak.id), zadatci)
-        newList = newList.concat(zadatci.slice(lastIndex, first))
+  let nadzadatci = await db("nadzadatak")
+    .whereIn("id", Array.from(nadzadatciIds))
+    .select();
 
+  let newList = [];
+  let lastIndex = 0;
 
+  nadzadatci.forEach((nadzadatak, i) => {
+    nadzadatci[i].type = "nadzadatak";
 
-        let nadzadatakZadatci = nadzadatak
-        nadzadatakZadatci.zadatci = zadatci.slice(first, last+1)
-        newList = newList.concat(nadzadatakZadatci)
+    let { first, last } = findZadatciWithNadzadatak(
+      parseInt(nadzadatak.id),
+      zadatci
+    );
+    newList = newList.concat(zadatci.slice(lastIndex, first));
+    newList.push(nadzadatak);
 
+    lastIndex = last + 1;
+  });
 
-        lastIndex = last+1
-     })
-     newList = newList.concat(zadatci.slice(lastIndex, zadatci.length+1))
-    
+  newList = newList.concat(zadatci.slice(lastIndex, zadatci.length + 1));
 
+  res.json(newList);
+});
 
-     res.json(newList)
+app.get("/rjesenja", async (req, res) => {
+  const { zadatak_id } = req.query;
 
-})
+  let rjesenja = await db("rjesenje")
+    .where({ zadatak_id: zadatak_id })
+    .select();
 
-app.put('/zadatak', (req, res) => {
-    const {vrsta_id, matura_id, broj_zadatka, zadatak_tekst, slika_path, nadzadatak_id, broj_bodova, primjer} = req.body
+  res.json(rjesenja);
+});
 
-    db('zadatak').insert({
+app.get("/zadatak", async (req, res) => {
+  const { zadatak_id } = req.query;
+
+  zadatak = await db("zadatak").where({ id: zadatak_id }).select().first();
+
+  res.json(zadatak);
+});
+
+app.get("/nadzadatak/zadatci", async (req, res) => {
+  const { nadzadatak_id } = req.query;
+
+  zadatci = await db("zadatak")
+    .where({ nadzadatak_id: nadzadatak_id })
+    .orderBy("broj_zadatka")
+    .select();
+
+  res.json(zadatci);
+});
+
+// POST ROUTES
+
+app.post("/zadatak", (req, res) => {
+  const {
+    vrsta_id,
+    matura_id,
+    broj_zadatka,
+    zadatak_tekst,
+    slika_path,
+    nadzadatak_id,
+    broj_bodova,
+    primjer,
+  } = req.body;
+
+  db("zadatak")
+    .insert(
+      {
         vrsta_id: vrsta_id,
         matura_id: matura_id,
         broj_zadatka: broj_zadatka,
@@ -152,28 +224,62 @@ app.put('/zadatak', (req, res) => {
         nadzadatak_id: nadzadatak_id,
         broj_bodova: broj_bodova,
         primjer: primjer,
-        date_created: new Date()
-    }, ['id']).then(data => res.json(data))
-})
+        date_created: new Date(),
+      },
+      ["id"]
+    )
+    .then((data) => res.json(data[0].id));
+});
 
-app.put('/nadzadatak', (req, res) => {
-    const {vrsta_id, matura_id, broj_nadzadatka, nadzadatak_tekst, slika_path, audio_path} = req.body
+app.post("/nadzadatak", (req, res) => {
+  const {
+    vrsta_id,
+    matura_id,
+    broj_nadzadatka,
+    nadzadatak_tekst,
+    slika_path,
+    audio_path,
+  } = req.body;
 
-    db('nadzadatak').insert({
+  db("nadzadatak")
+    .insert(
+      {
         vrsta_id: vrsta_id,
         matura_id: matura_id,
         broj_nadzadatka: broj_nadzadatka,
         nadzadatak_tekst: nadzadatak_tekst,
         slika_path: slika_path,
         audio_path: audio_path,
-        date_created: new Date()
-    }, ['id']).then(data => res.json(data))
-})
+        date_created: new Date(),
+      },
+      ["id"]
+    )
+    .then((id) => {
+      id = id[0].id;
+      db("zadatak")
+        .insert({
+          matura_id: matura_id,
+          nadzadatak_id: id,
+          date_created: new Date(),
+        })
+        .then((_) => res.json(id));
+    });
+});
 
-app.put('/rjesenje', (req, res) => {
-    const {matura_id, rjesenje_tekst, zadatak_id, slika_path, slovo, tocno, broj_bodova} = req.body
+app.post("/rjesenje", (req, res) => {
+  const {
+    matura_id,
+    rjesenje_tekst,
+    zadatak_id,
+    slika_path,
+    slovo,
+    tocno,
+    broj_bodova,
+  } = req.body;
 
-    db('rjesenje').insert({
+  db("rjesenje")
+    .insert(
+      {
         matura_id: matura_id,
         rjesenje_tekst: rjesenje_tekst,
         zadatak_id: zadatak_id,
@@ -181,12 +287,165 @@ app.put('/rjesenje', (req, res) => {
         tocno: tocno,
         slika_path: slika_path,
         broj_bodova: broj_bodova,
-        date_created: new Date()
-    }, ['id']).then(data => res.json(data))
-})
+        date_created: new Date(),
+      },
+      ["id"]
+    )
+    .then((data) => res.json(data));
+});
 
+// PUT ROUTES
 
+app.put("/nadzadatak", (req, res) => {
+  const {
+    id,
+    vrsta_id,
+    broj_nadzadatka,
+    nadzadatak_tekst,
+    slika_path,
+    audio_path,
+  } = req.body;
+
+  db("nadzadatak")
+    .where({ id: id })
+    .update({
+      vrsta_id: vrsta_id,
+      broj_nadzadatka: broj_nadzadatka,
+      nadzadatak_tekst: nadzadatak_tekst,
+      slika_path: slika_path,
+      audio_path: audio_path,
+      date_updated: new Date(),
+    })
+    .then((data) => res.json(data));
+});
+
+app.put("/zadatak", (req, res) => {
+  const {
+    id,
+    vrsta_id,
+    matura_id,
+    broj_zadatka,
+    zadatak_tekst,
+    slika_path,
+    broj_bodova,
+    primjer,
+    rjesenjaList,
+  } = req.body;
+
+  db("zadatak")
+    .where({ id: id })
+    .update({
+      vrsta_id: vrsta_id,
+      matura_id: matura_id,
+      broj_zadatka: broj_zadatka,
+      zadatak_tekst: zadatak_tekst,
+      slika_path: slika_path,
+      broj_bodova: broj_bodova,
+      primjer: primjer,
+      date_updated: new Date(),
+    })
+    .then((data) => res.json(data));
+
+  console.log(rjesenjaList);
+  for (rjesenje of rjesenjaList) {
+    db("rjesenje").where({ id: rjesenje.id }).update({
+      matura_id: rjesenje.matura_id,
+      rjesenje_tekst: rjesenje.rjesenje_tekst,
+      zadatak_id: rjesenje.zadatak_id,
+      slovo: rjesenje.slovo,
+      tocno: rjesenje.tocno,
+      slika_path: rjesenje.slika_path,
+      broj_bodova: rjesenje.broj_bodova,
+      date_updated: new Date(),
+    });
+  }
+});
+
+app.put("/rjesenje", (req, res) => {
+  const {
+    rjesenje_id,
+    matura_id,
+    rjesenje_tekst,
+    zadatak_id,
+    slika_path,
+    slovo,
+    tocno,
+    broj_bodova,
+  } = req.body;
+
+  db("rjesenje")
+    .where({ id: rjesenje_id })
+    .update(
+      {
+        matura_id: matura_id,
+        rjesenje_tekst: rjesenje_tekst,
+        zadatak_id: zadatak_id,
+        slovo: slovo,
+        tocno: tocno,
+        slika_path: slika_path,
+        broj_bodova: broj_bodova,
+        date_updated: new Date(),
+      },
+      ["id"]
+    )
+    .then((data) => res.json(data));
+});
+
+// DELETE ROUTES
+
+app.delete("/delete", (req, res) => {
+  const { id, type } = req.query;
+
+  db(type)
+    .where({ id: id })
+    .delete()
+    .then((_) => {
+      if (type === "nadzadatak") {
+        db("zadatak").where({ nadzadatak_id: id }).delete().catch(console.log);
+      }
+      // TODO DELETE RJESENJA
+
+      res.json("Success");
+    })
+    .catch((err) => res.status(500).json(err));
+});
+
+app.delete("/rjesenje", async (req, res) => {
+  const { rjesenje_id } = req.query;
+
+  let rjesenjeDeleted = deleteRjesenje(rjesenje_id);
+
+  if (rjesenjeDeleted) {
+    res.json("Success");
+  } else {
+    res.status(400).json("Error");
+  }
+});
+
+app.delete("/zadatak", async (req, res) => {
+  const { zadatak_id } = req.query;
+
+  let zadatakDeleted = deleteZadatak(zadatak_id);
+
+  if (zadatakDeleted) {
+    res.json("Success");
+  } else {
+    res.status(400).json("Error");
+  }
+});
+
+app.delete("/nadzadatak", async (req, res) => {
+  const { nadzadatak_id } = req.query;
+
+  let nadzadatakDeleted = deleteNadzadatak(nadzadatak_id);
+
+  if (nadzadatakDeleted) {
+    res.json("Success");
+  } else {
+    res.status(400).json("Error");
+  }
+});
 
 app.listen(port, () => {
-console.log(`Example app listening on port ${port}`)
-})
+  console.log(`Example app listening on port ${port}`);
+});
