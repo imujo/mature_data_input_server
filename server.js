@@ -5,9 +5,35 @@ const db = require("./knex/db.js");
 var cors = require("cors");
 const app = express();
 const port = 3001;
+const multer = require("multer");
+const fs = require("fs");
 
 app.use(cors());
 app.use(json());
+app.use(express.static("public"));
+
+const imageUploadPath = "/Users/ivomujo/Desktop/images/";
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, imageUploadPath);
+  },
+  filename: function (req, file, cb) {
+    cb(null, `${file.fieldname}_dateVal_${Date.now()}_${file.originalname}`);
+  },
+});
+
+const imageUpload = multer({ storage: storage });
+
+app.post("/image-upload", imageUpload.array("my-image-file"), (req, res) => {
+  console.log(req.file);
+  let filename = req.file.filename;
+  fs.move(imageUploadPath + filename, imageUploadPath + "test/" + filename);
+
+  console.log("POST request received to /image-upload.");
+  console.log("Axios POST body: ", req.body);
+  res.send("POST request recieved on server to /image-upload.");
+});
 
 // FUNCTIONS
 const findZadatciWithNadzadatak = (id, zadatci) => {
@@ -175,6 +201,7 @@ app.get("/rjesenja", async (req, res) => {
 
   let rjesenja = await db("rjesenje")
     .where({ zadatak_id: zadatak_id })
+    .orderBy("orderby")
     .select();
 
   res.json(rjesenja);
@@ -207,11 +234,12 @@ app.post("/zadatak", (req, res) => {
     matura_id,
     broj_zadatka,
     zadatak_tekst,
-    slika_path,
     nadzadatak_id,
     broj_bodova,
     primjer,
   } = req.body;
+
+  console.log(slika_path);
 
   db("zadatak")
     .insert(
@@ -220,10 +248,10 @@ app.post("/zadatak", (req, res) => {
         matura_id: matura_id,
         broj_zadatka: broj_zadatka,
         zadatak_tekst: zadatak_tekst,
-        slika_path: slika_path,
         nadzadatak_id: nadzadatak_id,
         broj_bodova: broj_bodova,
         primjer: primjer,
+        islocked: false,
         date_created: new Date(),
       },
       ["id"]
@@ -250,6 +278,7 @@ app.post("/nadzadatak", (req, res) => {
         nadzadatak_tekst: nadzadatak_tekst,
         slika_path: slika_path,
         audio_path: audio_path,
+        islocked: false,
         date_created: new Date(),
       },
       ["id"]
@@ -329,7 +358,6 @@ app.put("/zadatak", (req, res) => {
     slika_path,
     broj_bodova,
     primjer,
-    rjesenjaList,
   } = req.body;
 
   db("zadatak")
@@ -345,50 +373,48 @@ app.put("/zadatak", (req, res) => {
       date_updated: new Date(),
     })
     .then((data) => res.json(data));
-
-  console.log(rjesenjaList);
-  for (rjesenje of rjesenjaList) {
-    db("rjesenje").where({ id: rjesenje.id }).update({
-      matura_id: rjesenje.matura_id,
-      rjesenje_tekst: rjesenje.rjesenje_tekst,
-      zadatak_id: rjesenje.zadatak_id,
-      slovo: rjesenje.slovo,
-      tocno: rjesenje.tocno,
-      slika_path: rjesenje.slika_path,
-      broj_bodova: rjesenje.broj_bodova,
-      date_updated: new Date(),
-    });
-  }
 });
 
 app.put("/rjesenje", (req, res) => {
   const {
     rjesenje_id,
-    matura_id,
     rjesenje_tekst,
-    zadatak_id,
     slika_path,
     slovo,
     tocno,
     broj_bodova,
+    index,
   } = req.body;
 
   db("rjesenje")
     .where({ id: rjesenje_id })
     .update(
       {
-        matura_id: matura_id,
         rjesenje_tekst: rjesenje_tekst,
-        zadatak_id: zadatak_id,
         slovo: slovo,
         tocno: tocno,
         slika_path: slika_path,
         broj_bodova: broj_bodova,
+        orderby: index,
         date_updated: new Date(),
       },
       ["id"]
     )
     .then((data) => res.json(data));
+});
+
+app.put("/lock", (req, res) => {
+  const { id, table } = req.query;
+
+  db(table)
+    .where({ id: id })
+    .select("islocked")
+    .then((data) => {
+      db(table)
+        .where({ id: id })
+        .update({ islocked: !data[0].islocked })
+        .then((data) => res.json(data));
+    });
 });
 
 // DELETE ROUTES
