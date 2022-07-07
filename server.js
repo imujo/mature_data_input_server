@@ -1,4 +1,4 @@
-const { json } = require("body-parser");
+const bodyParser = require("body-parser");
 const express = require("express");
 const { default: knex } = require("knex");
 const db = require("./knex/db.js");
@@ -9,30 +9,81 @@ const multer = require("multer");
 const fs = require("fs");
 
 app.use(cors());
-app.use(json());
-app.use(express.static("public"));
+app.use(bodyParser.json({ limit: "50mb" }));
+app.use(bodyParser.urlencoded({ extended: true, limit: "50mb" }));
+app.use(express.static("uploads"));
 
-const imageUploadPath = "/Users/ivomujo/Desktop/images/";
+const uploadsPath =
+  "/Users/ivomujo/Development/Personal projects/Rjesavanje matura/data_config/data-input-server/uploads/";
 
-const storage = multer.diskStorage({
+var storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, imageUploadPath);
+    cb(null, uploadsPath);
   },
   filename: function (req, file, cb) {
-    cb(null, `${file.fieldname}_dateVal_${Date.now()}_${file.originalname}`);
+    cb(null, file.originalname);
   },
 });
 
-const imageUpload = multer({ storage: storage });
+var upload = multer({ storage: storage });
 
-app.post("/image-upload", imageUpload.array("my-image-file"), (req, res) => {
-  console.log(req.file);
-  let filename = req.file.filename;
-  fs.move(imageUploadPath + filename, imageUploadPath + "test/" + filename);
+const changeName = (folder_path, filename) => {
+  let index = 0;
+  let filenameSplit = filename.split(".");
 
-  console.log("POST request received to /image-upload.");
-  console.log("Axios POST body: ", req.body);
-  res.send("POST request recieved on server to /image-upload.");
+  let ext = filenameSplit[filenameSplit.length - 1];
+
+  let path = `${folder_path}/file.${ext}`;
+
+  while (fs.existsSync(path)) {
+    path = `${folder_path}/file (${index}).${ext}`;
+    index++;
+  }
+
+  return path;
+};
+
+app.post("/file-upload", upload.single("file"), async (req, res) => {
+  let tmp_path = req.file.path;
+  const { table, matura_id, table_id, type } = req.query;
+
+  let fileData = await db(table).where({ id: table_id }).select(`${type}_path`);
+  fileData = fileData[0][`${type}_path`];
+  if (fileData) {
+    fs.unlinkSync(fileData);
+  }
+
+  let target_folder = `uploads/${type}/${table}/${matura_id}`;
+
+  // create folder if doesnt exist
+  if (!fs.existsSync(target_folder)) {
+    fs.mkdirSync(target_folder, { recursive: true });
+  }
+
+  let target_path = changeName(target_folder, req.file.originalname);
+
+  let src = fs.createReadStream(tmp_path);
+  let dest = fs.createWriteStream(target_path);
+  src.pipe(dest);
+  src.on("end", function () {
+    fs.unlinkSync(tmp_path);
+    let data = {};
+    data[`${type}_path`] = target_path;
+    db(table)
+      .where({ id: table_id })
+      .update(data)
+      .then(() => res.send("complete"));
+  });
+  src.on("error", function (err) {
+    res.send("error");
+  });
+});
+
+app.delete("/deleteFile", (req, res) => {
+  const { table, table_id, type } = req.query;
+
+  deleteFile(table, table_id, type);
+  res.json("success");
 });
 
 // FUNCTIONS
@@ -50,10 +101,13 @@ const findZadatciWithNadzadatak = (id, zadatci) => {
 };
 
 const deleteRjesenje = async (rjesenje_id) => {
+  deleteFile("rjesenje", rjesenje_id, "slika");
   return await db("rjesenje").where({ id: rjesenje_id }).del();
 };
 
 const deleteZadatak = async (zadatak_id) => {
+  deleteFile("zadatak", zadatak_id, "slika");
+
   let zadatakDeleted = await db("zadatak").where({ id: zadatak_id }).del();
 
   const rjesenjaList = await db("rjesenje")
@@ -68,6 +122,9 @@ const deleteZadatak = async (zadatak_id) => {
 };
 
 const deleteNadzadatak = async (nadzadatak_id) => {
+  deleteFile("nadzadatak", nadzadatak_id, "slika");
+  deleteFile("nadzadatak", nadzadatak_id, "audio");
+
   let nadzadatakDeleted = await db("nadzadatak")
     .where({ id: nadzadatak_id })
     .del();
@@ -81,6 +138,21 @@ const deleteNadzadatak = async (nadzadatak_id) => {
   }
 
   return nadzadatakDeleted;
+};
+
+const deleteFile = async (table, table_id, type) => {
+  let filePath = await db(table).where({ id: table_id }).select(`${type}_path`);
+  filePath = filePath[0][`${type}_path`];
+
+  if (filePath) {
+    fs.unlink(filePath, async (msg, err) => {
+      let data = {};
+      data[`${type}_path`] = null;
+      let newFilePath = await db(table)
+        .where({ id: table_id })
+        .update(data, [`${type}_path`]);
+    });
+  }
 };
 
 // GET ROUTES
@@ -238,8 +310,6 @@ app.post("/zadatak", (req, res) => {
     broj_bodova,
     primjer,
   } = req.body;
-
-  console.log(slika_path);
 
   db("zadatak")
     .insert(
