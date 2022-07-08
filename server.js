@@ -142,7 +142,10 @@ const deleteNadzadatak = async (nadzadatak_id) => {
 
 const deleteFile = async (table, table_id, type) => {
   let filePath = await db(table).where({ id: table_id }).select(`${type}_path`);
-  filePath = filePath[0][`${type}_path`];
+
+  if (filePath) {
+    filePath = filePath[0][`${type}_path`];
+  }
 
   if (filePath) {
     fs.unlink(filePath, async (msg, err) => {
@@ -236,16 +239,24 @@ app.get("/zadatak/all", async (req, res) => {
     .orderBy("broj_zadatka")
     .select();
 
-  let nadzadatciIds = new Set();
+  let nadzadatciIds = [];
 
   for (let i = 0; i < zadatci.length; i++) {
     zadatci[i].type = "zadatak";
-    nadzadatciIds.add(zadatci[i].nadzadatak_id);
-  }
+    let nadzadatak_id = zadatci[i].nadzadatak_id;
 
-  let nadzadatci = await db("nadzadatak")
-    .whereIn("id", Array.from(nadzadatciIds))
-    .select();
+    if (nadzadatak_id && !nadzadatciIds.includes(nadzadatak_id)) {
+      nadzadatciIds.push(nadzadatak_id);
+    }
+  }
+  let nadzadatci = [];
+
+  for (let nadzadatakId of nadzadatciIds) {
+    let nadzadatak = await db("nadzadatak")
+      .where({ id: nadzadatakId })
+      .select();
+    nadzadatci.push(nadzadatak[0]);
+  }
 
   let newList = [];
   let lastIndex = 0;
@@ -257,6 +268,7 @@ app.get("/zadatak/all", async (req, res) => {
       parseInt(nadzadatak.id),
       zadatci
     );
+    console.log(first, last, nadzadatak.id);
     newList = newList.concat(zadatci.slice(lastIndex, first));
     newList.push(nadzadatak);
 
