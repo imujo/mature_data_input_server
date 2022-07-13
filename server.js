@@ -195,40 +195,77 @@ app.get("/predmet/all", (req, res) => {
     .catch((err) => res.status(500).send("error"));
 });
 
-app.get("/zadatak_vrsta/all", (req, res) => {
-  db.select("id", "zadatak_vrsta")
-    .from("zadatak_vrsta")
-    .then((data) => {
-      if (data.length) {
-        let newDict = {};
+app.get("/zadatak_vrsta/all", async (req, res) => {
+  const { matura_id } = req.query;
 
-        data.forEach((item, i) => {
-          newDict[item.zadatak_vrsta] = item.id;
-        });
-        return res.json(newDict);
-      }
+  let predmet_id = await db("matura")
+    .where({ id: matura_id })
+    .select("predmet_id")
+    .pluck("predmet_id");
 
-      res.status(500).json("error");
-    })
-    .catch((err) => res.status(500).send("error"));
+  let vrsta_id_list = await db("predmet_zadatak_vrsta")
+    .where({ predmet_id: predmet_id[0] })
+    .select("zadatak_vrsta_id")
+    .pluck("zadatak_vrsta_id");
+
+  let data = await db("zadatak_vrsta")
+    .whereIn("id", vrsta_id_list)
+    .select("id", "zadatak_vrsta");
+
+  let vrste = {};
+  if (data.length) {
+    data.forEach((item, i) => {
+      vrste[item.zadatak_vrsta] = item.id;
+    });
+  }
+  res.json(vrste);
 });
 
-app.get("/nadzadatak_vrsta/all", (req, res) => {
-  db.select("id", "nadzadatak_vrsta")
-    .from("nadzadatak_vrsta")
-    .then((data) => {
-      if (data.length) {
-        let newDict = {};
+app.get("/nadzadatak_vrsta/all", async (req, res) => {
+  const { matura_id } = req.query;
 
-        data.forEach((item, i) => {
-          newDict[item.nadzadatak_vrsta] = item.id;
-        });
-        return res.json(newDict);
-      }
+  let predmet_id = await db("matura")
+    .where({ id: matura_id })
+    .select("predmet_id")
+    .pluck("predmet_id");
 
-      res.status(500).json("error");
-    })
-    .catch((err) => res.status(500).send("error"));
+  let vrsta_id_list = await db("predmet_nadzadatak_vrsta")
+    .where({ predmet_id: predmet_id[0] })
+    .select("nadzadatak_vrsta_id")
+    .pluck("nadzadatak_vrsta_id");
+
+  let data = await db("nadzadatak_vrsta")
+    .whereIn("id", vrsta_id_list)
+    .select("id", "nadzadatak_vrsta");
+
+  let vrste = {};
+  if (data.length) {
+    data.forEach((item, i) => {
+      vrste[item.nadzadatak_vrsta] = item.id;
+    });
+  }
+  res.json(vrste);
+});
+
+app.get("/odjeljak/all", async (req, res) => {
+  const { matura_id } = req.query;
+
+  let predmet_id = await db("matura")
+    .where({ id: matura_id })
+    .select("predmet_id")
+    .pluck("predmet_id");
+
+  let data = await db("zadatak_odjeljak")
+    .where({ predmet_id: predmet_id[0] })
+    .select("id", "odjeljak");
+
+  let odjeljci = {};
+  if (data.length) {
+    data.forEach((item, i) => {
+      odjeljci[item.odjeljak] = item.id;
+    });
+  }
+  res.json(odjeljci);
 });
 
 app.get("/zadatak/all", async (req, res) => {
@@ -258,26 +295,23 @@ app.get("/zadatak/all", async (req, res) => {
     nadzadatci.push(nadzadatak[0]);
   }
 
-  let newList = [];
-  let lastIndex = 0;
-
   nadzadatci.forEach((nadzadatak, i) => {
     nadzadatci[i].type = "nadzadatak";
 
-    let { first, last } = findZadatciWithNadzadatak(
-      parseInt(nadzadatak.id),
-      zadatci
-    );
-    console.log(first, last, nadzadatak.id);
-    newList = newList.concat(zadatci.slice(lastIndex, first));
-    newList.push(nadzadatak);
+    let zadatakWithNadzadatakId = zadatci.findIndex((zadatak) => {
+      return zadatak.nadzadatak_id == nadzadatak.id;
+    });
 
-    lastIndex = last + 1;
+    zadatci[zadatakWithNadzadatakId] = nadzadatak;
+
+    zadatci = zadatci.filter((zadatak) => {
+      return zadatak.nadzadatak_id !== parseInt(nadzadatak.id);
+    });
   });
 
-  newList = newList.concat(zadatci.slice(lastIndex, zadatci.length + 1));
+  console.log(zadatci);
 
-  res.json(newList);
+  res.json(zadatci);
 });
 
 app.get("/rjesenja", async (req, res) => {
@@ -415,6 +449,7 @@ app.put("/nadzadatak", (req, res) => {
     nadzadatak_tekst,
     slika_path,
     audio_path,
+    odjeljak_id,
   } = req.body;
 
   db("nadzadatak")
@@ -425,6 +460,7 @@ app.put("/nadzadatak", (req, res) => {
       nadzadatak_tekst: nadzadatak_tekst,
       slika_path: slika_path,
       audio_path: audio_path,
+      odjeljak_id: odjeljak_id,
       date_updated: new Date(),
     })
     .then((data) => res.json(data));
@@ -440,6 +476,7 @@ app.put("/zadatak", (req, res) => {
     slika_path,
     broj_bodova,
     primjer,
+    odjeljak_id,
   } = req.body;
 
   db("zadatak")
@@ -447,11 +484,12 @@ app.put("/zadatak", (req, res) => {
     .update({
       vrsta_id: vrsta_id,
       matura_id: matura_id,
-      broj_zadatka: broj_zadatka,
+      broj_zadatka: broj_zadatka ? broj_zadatka : null,
       zadatak_tekst: zadatak_tekst,
       slika_path: slika_path,
       broj_bodova: broj_bodova,
       primjer: primjer,
+      odjeljak_id: odjeljak_id,
       date_updated: new Date(),
     })
     .then((data) => res.json(data));
