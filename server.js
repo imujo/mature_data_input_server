@@ -450,7 +450,10 @@ app.put("/nadzadatak", (req, res) => {
     slika_path,
     audio_path,
     odjeljak_id,
+    task,
   } = req.body;
+
+  console.log(task);
 
   db("nadzadatak")
     .where({ id: id })
@@ -461,6 +464,7 @@ app.put("/nadzadatak", (req, res) => {
       slika_path: slika_path,
       audio_path: audio_path,
       odjeljak_id: odjeljak_id,
+      task: task,
       date_updated: new Date(),
     })
     .then((data) => res.json(data));
