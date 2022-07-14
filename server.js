@@ -158,6 +158,22 @@ const deleteFile = async (table, table_id, type) => {
   }
 };
 
+app.use((req, res, next) => {
+  for (const [key, value] of Object.entries(req.body)) {
+    if (!value) {
+      req.body[key] = null;
+    }
+  }
+
+  for (const [key, value] of Object.entries(req.query)) {
+    if (!value) {
+      req.query[key] = null;
+    }
+  }
+
+  next();
+});
+
 // GET ROUTES
 
 app.get("/matura_id", (req, res) => {
@@ -452,8 +468,6 @@ app.put("/nadzadatak", (req, res) => {
     odjeljak_id,
     task,
   } = req.body;
-
-  console.log(task);
 
   db("nadzadatak")
     .where({ id: id })
