@@ -9,6 +9,7 @@ const port = 3001;
 const passport = require("passport");
 const authRoutes = require("./routes/authRoutes");
 const apiRoutes = require("./routes/apiRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 
 require("./auth_config/passport")(passport);
 app.use(cors());
@@ -18,8 +19,8 @@ app.use(express.static("uploads"));
 app.use(passport.initialize());
 
 app.use("/auth", authRoutes);
-
 app.use("/", apiRoutes);
+app.use("/admin", adminRoutes);
 
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);

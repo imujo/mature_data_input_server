@@ -151,4 +151,5 @@ router.get("/user", (req, res) => {
 
   res.json(user);
 });
+
 module.exports = router;

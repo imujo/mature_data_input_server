@@ -36,49 +36,6 @@ const changeName = (folder_path, filename) => {
   return path;
 };
 
-router.post("/file-upload", upload.single("file"), async (req, res) => {
-  let tmp_path = req.file.path;
-  const { table, matura_id, table_id, type } = req.query;
-
-  let fileData = await db(table).where({ id: table_id }).select(`${type}_path`);
-  fileData = fileData[0][`${type}_path`];
-  if (fileData) {
-    fs.unlinkSync(fileData);
-  }
-
-  let target_folder = `uploads/${type}/${table}/${matura_id}`;
-
-  // create folder if doesnt exist
-  if (!fs.existsSync(target_folder)) {
-    fs.mkdirSync(target_folder, { recursive: true });
-  }
-
-  let target_path = changeName(target_folder, req.file.originalname);
-
-  let src = fs.createReadStream(tmp_path);
-  let dest = fs.createWriteStream(target_path);
-  src.pipe(dest);
-  src.on("end", function () {
-    fs.unlinkSync(tmp_path);
-    let data = {};
-    data[`${type}_path`] = target_path;
-    db(table)
-      .where({ id: table_id })
-      .update(data)
-      .then(() => res.send("complete"));
-  });
-  src.on("error", function (err) {
-    res.send("error");
-  });
-});
-
-router.delete("/deleteFile", (req, res) => {
-  const { table, table_id, type } = req.query;
-
-  deleteFile(table, table_id, type);
-  res.json("success");
-});
-
 // FUNCTIONS
 
 const deleteRjesenje = async (rjesenje_id) => {
@@ -140,6 +97,43 @@ const deleteFile = async (table, table_id, type) => {
   }
 };
 
+function range(start, end) {
+  var ans = [];
+  for (let i = start; i <= end; i++) {
+    ans.push(i);
+  }
+  return ans;
+}
+
+const userHasAccess = async (user_id, godina, predmet_id, sezona, razina) => {
+  let user_type_id = await db("users")
+    .where({ id: user_id })
+    .select("type")
+    .pluck("type");
+
+  if (user_type_id == 1) {
+    return true;
+  }
+
+  let mature_list = await db("user_access_condition").where({
+    user_id: user_id,
+    razina: razina,
+    sezona: sezona,
+    predmet_id: predmet_id,
+  });
+
+  mature_list = mature_list.filter((matura) => {
+    let godineRange = range(matura.godina_start, matura.godina_end);
+
+    if (godineRange.includes(parseInt(godina))) {
+      return true;
+    }
+    return false;
+  });
+
+  return mature_list.length > 0;
+};
+
 router.use((req, res, next) => {
   for (const [key, value] of Object.entries(req.body)) {
     if (!value) {
@@ -155,13 +149,6 @@ router.use((req, res, next) => {
 
   next();
 });
-
-const userHasAccess = async (user_id, matura_id) => {
-  const data = await db("user_access")
-    .where({ user_id: user_id, matura_id: matura_id })
-    .select();
-  return data.length > 0;
-};
 
 // GET ROUTES
 
@@ -179,8 +166,13 @@ router.get("/matura_id", (req, res) => {
     .then(async (data) => {
       if (data.length) {
         let matura_id = data[0].id;
-        let access = await userHasAccess(req.user.id, matura_id);
-        console.log(matura_id, req.user.id);
+        let access = await userHasAccess(
+          req.user.id,
+          godina,
+          predmet_id,
+          sezona,
+          razina
+        );
         if (access) {
           res.json({ isSuccess: true, data: matura_id });
         } else {
@@ -192,8 +184,8 @@ router.get("/matura_id", (req, res) => {
       } else {
         res.status(500).json({ isSuccess: false, msg: "No matura found" });
       }
-    })
-    .catch((err) => res.status(500).send("error"));
+    });
+  // .catch((err) => res.status(500).send(err));
 });
 
 router.get("/predmet/all", (req, res) => {
@@ -570,8 +562,50 @@ router.put("/lock", (req, res) => {
     });
 });
 
+router.post("/file-upload", upload.single("file"), async (req, res) => {
+  let tmp_path = req.file.path;
+  const { table, matura_id, table_id, type } = req.query;
+
+  let fileData = await db(table).where({ id: table_id }).select(`${type}_path`);
+  fileData = fileData[0][`${type}_path`];
+  if (fileData) {
+    fs.unlinkSync(fileData);
+  }
+
+  let target_folder = `uploads/${type}/${table}/${matura_id}`;
+
+  // create folder if doesnt exist
+  if (!fs.existsSync(target_folder)) {
+    fs.mkdirSync(target_folder, { recursive: true });
+  }
+
+  let target_path = changeName(target_folder, req.file.originalname);
+
+  let src = fs.createReadStream(tmp_path);
+  let dest = fs.createWriteStream(target_path);
+  src.pipe(dest);
+  src.on("end", function () {
+    fs.unlinkSync(tmp_path);
+    let data = {};
+    data[`${type}_path`] = target_path;
+    db(table)
+      .where({ id: table_id })
+      .update(data)
+      .then(() => res.send("complete"));
+  });
+  src.on("error", function (err) {
+    res.send("error");
+  });
+});
+
 // DELETE ROUTES
 
+router.delete("/deleteFile", (req, res) => {
+  const { table, table_id, type } = req.query;
+
+  deleteFile(table, table_id, type);
+  res.json("success");
+});
 router.delete("/delete", (req, res) => {
   const { id, type } = req.query;
 
