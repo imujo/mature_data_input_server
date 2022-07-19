@@ -206,6 +206,19 @@ router.get("/predmet/all", (req, res) => {
     .catch((err) => res.status(500).send("error"));
 });
 
+router.get("/predmet", (req, res) => {
+  const { predmet_id } = req.query;
+
+  db("predmet")
+    .where({ id: predmet_id })
+    .select("predmet")
+    .pluck("predmet")
+    .then((data) => {
+      res.json(data);
+    })
+    .catch((err) => res.status(500).send("error"));
+});
+
 router.get("/zadatak_vrsta/all", async (req, res) => {
   const { matura_id } = req.query;
 
