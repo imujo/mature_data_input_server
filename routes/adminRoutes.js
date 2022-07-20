@@ -1,7 +1,9 @@
 const router = require("express").Router();
 const db = require("../knex/db");
-
 const passport = require("passport");
+
+// MIDDLEWARE
+
 router.use(passport.authenticate("jwt", { session: false }));
 router.use((req, res, next) => {
   if (req.user.type === 1) {
@@ -10,8 +12,6 @@ router.use((req, res, next) => {
     res.status(400).json({ isSuccess: false, msg: "You are not an admin" });
   }
 });
-
-// FUNCTIONS
 
 // GET
 

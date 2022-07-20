@@ -2,9 +2,28 @@ const multer = require("multer");
 const fs = require("fs");
 const router = require("express").Router();
 const db = require("../knex/db");
-
 const passport = require("passport");
+
+// MIDDLEWARE
+
 router.use(passport.authenticate("jwt", { session: false }));
+router.use((req, res, next) => {
+  for (const [key, value] of Object.entries(req.body)) {
+    if (!value) {
+      req.body[key] = null;
+    }
+  }
+
+  for (const [key, value] of Object.entries(req.query)) {
+    if (!value) {
+      req.query[key] = null;
+    }
+  }
+
+  next();
+});
+
+// FILE UPLOAD SETUP
 
 const uploadsPath =
   "/Users/ivomujo/Development/Personal projects/Rjesavanje matura/data_config/data-input-server/uploads/";
@@ -19,6 +38,8 @@ var storage = multer.diskStorage({
 });
 
 var upload = multer({ storage: storage });
+
+// FUNCTIONS
 
 const changeName = (folder_path, filename) => {
   let index = 0;
@@ -35,8 +56,6 @@ const changeName = (folder_path, filename) => {
 
   return path;
 };
-
-// FUNCTIONS
 
 const deleteRjesenje = async (rjesenje_id) => {
   deleteFile("rjesenje", rjesenje_id, "slika");
@@ -133,22 +152,6 @@ const userHasAccess = async (user_id, godina, predmet_id, sezona, razina) => {
 
   return mature_list.length > 0;
 };
-
-router.use((req, res, next) => {
-  for (const [key, value] of Object.entries(req.body)) {
-    if (!value) {
-      req.body[key] = null;
-    }
-  }
-
-  for (const [key, value] of Object.entries(req.query)) {
-    if (!value) {
-      req.query[key] = null;
-    }
-  }
-
-  next();
-});
 
 // GET ROUTES
 
@@ -479,6 +482,42 @@ router.post("/rjesenje", (req, res) => {
     .then((data) => res.json(data));
 });
 
+router.post("/file-upload", upload.single("file"), async (req, res) => {
+  let tmp_path = req.file.path;
+  const { table, matura_id, table_id, type } = req.query;
+
+  let fileData = await db(table).where({ id: table_id }).select(`${type}_path`);
+  fileData = fileData[0][`${type}_path`];
+  if (fileData) {
+    fs.unlinkSync(fileData);
+  }
+
+  let target_folder = `uploads/${type}/${table}/${matura_id}`;
+
+  // create folder if doesnt exist
+  if (!fs.existsSync(target_folder)) {
+    fs.mkdirSync(target_folder, { recursive: true });
+  }
+
+  let target_path = changeName(target_folder, req.file.originalname);
+
+  let src = fs.createReadStream(tmp_path);
+  let dest = fs.createWriteStream(target_path);
+  src.pipe(dest);
+  src.on("end", function () {
+    fs.unlinkSync(tmp_path);
+    let data = {};
+    data[`${type}_path`] = target_path;
+    db(table)
+      .where({ id: table_id })
+      .update(data)
+      .then(() => res.send("complete"));
+  });
+  src.on("error", function (err) {
+    res.send("error");
+  });
+});
+
 // PUT ROUTES
 
 router.put("/nadzadatak", (req, res) => {
@@ -575,42 +614,6 @@ router.put("/lock", (req, res) => {
     });
 });
 
-router.post("/file-upload", upload.single("file"), async (req, res) => {
-  let tmp_path = req.file.path;
-  const { table, matura_id, table_id, type } = req.query;
-
-  let fileData = await db(table).where({ id: table_id }).select(`${type}_path`);
-  fileData = fileData[0][`${type}_path`];
-  if (fileData) {
-    fs.unlinkSync(fileData);
-  }
-
-  let target_folder = `uploads/${type}/${table}/${matura_id}`;
-
-  // create folder if doesnt exist
-  if (!fs.existsSync(target_folder)) {
-    fs.mkdirSync(target_folder, { recursive: true });
-  }
-
-  let target_path = changeName(target_folder, req.file.originalname);
-
-  let src = fs.createReadStream(tmp_path);
-  let dest = fs.createWriteStream(target_path);
-  src.pipe(dest);
-  src.on("end", function () {
-    fs.unlinkSync(tmp_path);
-    let data = {};
-    data[`${type}_path`] = target_path;
-    db(table)
-      .where({ id: table_id })
-      .update(data)
-      .then(() => res.send("complete"));
-  });
-  src.on("error", function (err) {
-    res.send("error");
-  });
-});
-
 // DELETE ROUTES
 
 router.delete("/deleteFile", (req, res) => {
@@ -619,6 +622,7 @@ router.delete("/deleteFile", (req, res) => {
   deleteFile(table, table_id, type);
   res.json("success");
 });
+
 router.delete("/delete", (req, res) => {
   const { id, type } = req.query;
 

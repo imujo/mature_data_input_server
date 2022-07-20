@@ -1,10 +1,24 @@
 const router = require("express").Router();
 const passport = require("passport");
-
 const genPassword = require("../lib/passwordUtils").genPassword;
 const db = require("../knex/db");
 const jwtUtils = require("../lib/jwtUtils");
 const passwordUtils = require("../lib/passwordUtils");
+
+// FUNCTIONS
+
+const isAdminMiddleware = (req, res, next) => {
+  console.log(req);
+  const isAdmin = req.user.type === 1;
+
+  if (isAdmin) {
+    next();
+  } else {
+    res.status(400).json({ isSuccess: false, msg: "You are not an admin" });
+  }
+};
+
+// ROUTES
 
 router.post("/login", (req, res) => {
   let { username, password } = req.body;
@@ -60,17 +74,6 @@ router.post("/login", (req, res) => {
       })
     );
 });
-
-const isAdminMiddleware = (req, res, next) => {
-  console.log(req);
-  const isAdmin = req.user.type === 1;
-
-  if (isAdmin) {
-    next();
-  } else {
-    res.status(400).json({ isSuccess: false, msg: "You are not an admin" });
-  }
-};
 
 router.use(passport.authenticate("jwt", { session: false }));
 
